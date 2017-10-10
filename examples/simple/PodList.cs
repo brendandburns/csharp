@@ -13,10 +13,12 @@ namespace simple
             Console.WriteLine("Starting Request!");
             var listTask = client.ListNamespacedPodWithHttpMessagesAsync("default").Result;
             var list = listTask.Body;
-            foreach (var item in list.Items) {
-                Console.WriteLine(item.Metadata.Name);
+            if (list != null) {
+                foreach (var item in list.Items) {
+                    Console.WriteLine(item.Metadata.Name);
+                }
             }
-            if (list.Items.Count == 0) {
+            if (list == null || list.Items.Count == 0) {
                 Console.WriteLine("Empty!");
             }
         }
