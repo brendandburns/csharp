@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 using Microsoft.Rest.Serialization;
-=======
-
->>>>>>> Add an initial generic client.
 using System;
 using System.Net.Http;
 using System.Threading;

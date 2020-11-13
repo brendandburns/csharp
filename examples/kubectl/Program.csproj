@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\KubernetesClient\KubernetesClient.csproj" />
+    <ProjectReference Include="..\..\src\Kubectl\Kubectl.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
