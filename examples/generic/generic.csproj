@@ -6,7 +6,11 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+<<<<<<< HEAD
     <TargetFramework>net5</TargetFramework>
+=======
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+>>>>>>> Add an initial generic client.
     <LangVersion>7.1</LangVersion>
   </PropertyGroup>
 
