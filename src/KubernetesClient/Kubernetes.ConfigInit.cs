@@ -214,7 +214,7 @@ namespace k8s
             }
 
             // If there are errors in the certificate chain, look at each error to determine the cause.
-            if ((sslPolicyErrors & SslPolicyErrors.RemoteCertificateChainErrors) != 0)
+            if (sslPolicyErrors == SslPolicyErrors.RemoteCertificateChainErrors)
             {
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
 

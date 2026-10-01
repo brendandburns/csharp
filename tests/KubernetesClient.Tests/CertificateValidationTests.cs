@@ -38,6 +38,23 @@ namespace k8s.Tests
             // untrustedServerCert.Dispose();
         }
 
+        [Fact]
+        public void ShouldRejectTrustedCertWhenHostnameDoesNotMatch()
+        {
+            using (var trustedCa = CreateSelfSignedCA("CN=Trusted CA"))
+            using (var serverCert = CreateServerCert(trustedCa, "CN=wrong-host.example.com"))
+            using (var chain = new X509Chain())
+            {
+                var trustedCaCerts = new X509Certificate2Collection { trustedCa };
+                var errors = SslPolicyErrors.RemoteCertificateNameMismatch |
+                             SslPolicyErrors.RemoteCertificateChainErrors;
+
+                var result = Kubernetes.CertificateValidationCallBack(this, trustedCaCerts, serverCert, chain, errors);
+
+                Assert.False(result, "Should reject a trusted certificate when its hostname does not match");
+            }
+        }
+
         // Helper methods to create test certificates
         private static X509Certificate2 CreateSelfSignedCA(string subject)
         {
