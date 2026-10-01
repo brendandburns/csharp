@@ -171,29 +171,9 @@ namespace k8s.Tests
         [OperatingSystemDependentFact(Exclude = OperatingSystems.OSX)]
         public void Cert()
         {
-            var serverCertificateData = File.ReadAllText("assets/apiserver-pfx-data.txt");
-
             var clientCertificateKeyData = File.ReadAllText("assets/client-key-data.txt");
             var clientCertificateData = File.ReadAllText("assets/client-certificate-data.txt");
-
-            X509Certificate2 serverCertificate = null;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                using (var serverCertificateStream =
-                    new MemoryStream(Convert.FromBase64String(serverCertificateData)))
-                {
-                    serverCertificate = OpenCertificateStore(serverCertificateStream);
-                }
-            }
-            else
-            {
-#if NET9_0_OR_GREATER
-                serverCertificate = X509CertificateLoader.LoadPkcs12(Convert.FromBase64String(serverCertificateData), "");
-#else
-                serverCertificate = new X509Certificate2(Convert.FromBase64String(serverCertificateData), "");
-#endif
-            }
+            var serverCertificate = CreateServerCertificate();
 
 #if NET9_0_OR_GREATER
             var clientCertificate = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(clientCertificateData));
@@ -571,6 +551,25 @@ namespace k8s.Tests
             certificate = RSACertificateExtensions.CopyWithPrivateKey(certificate, rsa);
 
             return certificate;
+        }
+
+        private static X509Certificate2 CreateServerCertificate()
+        {
+            using var rsa = RSA.Create(2048);
+            var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var subjectAlternativeName = new SubjectAlternativeNameBuilder();
+            subjectAlternativeName.AddDnsName("localhost");
+            subjectAlternativeName.AddIpAddress(IPAddress.Loopback);
+            request.CertificateExtensions.Add(subjectAlternativeName.Build());
+            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(
+                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment | X509KeyUsageFlags.KeyCertSign,
+                true));
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") },
+                true));
+
+            return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(365));
         }
 
         private K8SConfiguration GetK8SConfiguration(string serverUri, string responseJson, string name)
