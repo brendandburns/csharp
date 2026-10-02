@@ -193,7 +193,7 @@ namespace k8s.Tests
                     ClientCertificateValidation = (certificate, chain, valid) =>
                     {
                         clientCertificateValidationCalled = true;
-                        return clientCertificate.Equals(certificate);
+                        return certificate != null && clientCertificate.RawData.SequenceEqual(certificate.GetRawCertData());
                     },
                 });
             }))
