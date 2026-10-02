@@ -183,6 +183,7 @@ namespace k8s.Tests
 #endif
 
             var clientCertificateValidationCalled = false;
+            var presentedClientCertificateMatches = false;
 
             using (var server = new MockKubeApiServer(testOutput, listenConfigure: options =>
             {
@@ -193,7 +194,9 @@ namespace k8s.Tests
                     ClientCertificateValidation = (certificate, chain, valid) =>
                     {
                         clientCertificateValidationCalled = true;
-                        return certificate != null && clientCertificate.RawData.SequenceEqual(certificate.GetRawCertData());
+                        presentedClientCertificateMatches = certificate != null &&
+                            clientCertificate.RawData.SequenceEqual(certificate.GetRawCertData());
+                        return certificate != null;
                     },
                 });
             }))
@@ -217,6 +220,7 @@ namespace k8s.Tests
                     var listTask = ExecuteListPods(client);
 
                     Assert.True(clientCertificateValidationCalled);
+                    Assert.True(presentedClientCertificateMatches);
                     Assert.True(listTask.Response.IsSuccessStatusCode);
                     Assert.Single(listTask.Body.Items);
                 }
@@ -234,6 +238,7 @@ namespace k8s.Tests
                     var listTask = ExecuteListPods(client);
 
                     Assert.True(clientCertificateValidationCalled);
+                    Assert.True(presentedClientCertificateMatches);
                     Assert.True(listTask.Response.IsSuccessStatusCode);
                     Assert.Single(listTask.Body.Items);
                 }
