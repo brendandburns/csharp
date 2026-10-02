@@ -198,11 +198,16 @@ namespace k8s.Tests
                 });
             }))
             {
+                var serverUri = new UriBuilder(server.Uri)
+                {
+                    Host = "localhost",
+                }.Uri.ToString();
+
                 {
                     clientCertificateValidationCalled = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         ClientCertificateData = clientCertificateData,
                         ClientCertificateKeyData = clientCertificateKeyData,
                         SslCaCerts = new X509Certificate2Collection(trustedCaCertificate),
@@ -220,7 +225,7 @@ namespace k8s.Tests
                     clientCertificateValidationCalled = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         ClientCertificateData = clientCertificateData,
                         ClientCertificateKeyData = clientCertificateKeyData,
                         SkipTlsVerify = true,
@@ -237,7 +242,7 @@ namespace k8s.Tests
                     clientCertificateValidationCalled = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         ClientCertificateFilePath =
                             "assets/client.crt", // TODO amazoning why client.crt != client-data.txt
                         ClientKeyFilePath = "assets/client.key",
@@ -252,7 +257,7 @@ namespace k8s.Tests
                     clientCertificateValidationCalled = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         SkipTlsVerify = true,
                     });
 
