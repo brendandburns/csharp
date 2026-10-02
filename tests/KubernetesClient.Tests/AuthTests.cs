@@ -184,6 +184,7 @@ namespace k8s.Tests
 
             var clientCertificateValidationCalled = false;
             var presentedClientCertificateMatches = false;
+            var requireExpectedClientCertificate = false;
 
             using (var server = new MockKubeApiServer(testOutput, listenConfigure: options =>
             {
@@ -196,7 +197,7 @@ namespace k8s.Tests
                         clientCertificateValidationCalled = true;
                         presentedClientCertificateMatches = certificate != null &&
                             clientCertificate.RawData.SequenceEqual(certificate.GetRawCertData());
-                        return certificate != null;
+                        return certificate != null && (!requireExpectedClientCertificate || presentedClientCertificateMatches);
                     },
                 });
             }))
@@ -208,6 +209,7 @@ namespace k8s.Tests
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
                         Host = serverUri,
@@ -227,6 +229,7 @@ namespace k8s.Tests
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
                         Host = serverUri,
@@ -245,6 +248,7 @@ namespace k8s.Tests
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = true;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
                         Host = serverUri,
@@ -260,6 +264,7 @@ namespace k8s.Tests
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = true;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
                         Host = serverUri,
