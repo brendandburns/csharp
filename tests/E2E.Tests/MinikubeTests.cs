@@ -1117,14 +1117,32 @@ namespace k8s.E2E
                 var hpaList = await client.AutoscalingV2.ListNamespacedHorizontalPodAutoscalerAsync(namespaceParameter).ConfigureAwait(false);
                 Assert.Contains(hpaList.Items, item => item.Metadata.Name == hpaName);
 
-                var created = await client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(hpaName, namespaceParameter).ConfigureAwait(false);
-                Assert.Equal(1, created.Spec.MinReplicas);
+                var updateSucceeded = false;
+                for (var attempt = 0; attempt < 5; attempt++)
+                {
+                    var created = await client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(hpaName, namespaceParameter).ConfigureAwait(false);
+                    if (attempt == 0)
+                    {
+                        Assert.Equal(1, created.Spec.MinReplicas);
+                    }
 
-                created.Spec.MinReplicas = 2;
-                await client.AutoscalingV2.ReplaceNamespacedHorizontalPodAutoscalerAsync(created, hpaName, namespaceParameter).ConfigureAwait(false);
+                    created.Spec.MinReplicas = 2;
+                    try
+                    {
+                        await client.AutoscalingV2.ReplaceNamespacedHorizontalPodAutoscalerAsync(created, hpaName, namespaceParameter).ConfigureAwait(false);
+                        updateSucceeded = true;
+                        break;
+                    }
+                    catch (HttpOperationException e) when (e.Response.StatusCode == System.Net.HttpStatusCode.Conflict && attempt < 4)
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(100)).ConfigureAwait(false);
+                    }
+                }
 
-                var updated = await client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(hpaName, namespaceParameter).ConfigureAwait(false);
-                Assert.Equal(2, updated.Spec.MinReplicas);
+                Assert.True(updateSucceeded);
+
+                var reread = await client.AutoscalingV2.ReadNamespacedHorizontalPodAutoscalerAsync(hpaName, namespaceParameter).ConfigureAwait(false);
+                Assert.Equal(2, reread.Spec.MinReplicas);
 
                 await client.AutoscalingV2.DeleteNamespacedHorizontalPodAutoscalerAsync(hpaName, namespaceParameter, new V1DeleteOptions { PropagationPolicy = "Foreground" }).ConfigureAwait(false);
 

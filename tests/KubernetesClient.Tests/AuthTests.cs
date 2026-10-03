@@ -171,29 +171,10 @@ namespace k8s.Tests
         [OperatingSystemDependentFact(Exclude = OperatingSystems.OSX)]
         public void Cert()
         {
-            var serverCertificateData = File.ReadAllText("assets/apiserver-pfx-data.txt");
-
             var clientCertificateKeyData = File.ReadAllText("assets/client-key-data.txt");
             var clientCertificateData = File.ReadAllText("assets/client-certificate-data.txt");
-
-            X509Certificate2 serverCertificate = null;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                using (var serverCertificateStream =
-                    new MemoryStream(Convert.FromBase64String(serverCertificateData)))
-                {
-                    serverCertificate = OpenCertificateStore(serverCertificateStream);
-                }
-            }
-            else
-            {
-#if NET9_0_OR_GREATER
-                serverCertificate = X509CertificateLoader.LoadPkcs12(Convert.FromBase64String(serverCertificateData), "");
-#else
-                serverCertificate = new X509Certificate2(Convert.FromBase64String(serverCertificateData), "");
-#endif
-            }
+            using var serverCertificate = CreateServerCertificate(out var caCertificate);
+            using var trustedCaCertificate = caCertificate;
 
 #if NET9_0_OR_GREATER
             var clientCertificate = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(clientCertificateData));
@@ -202,6 +183,8 @@ namespace k8s.Tests
 #endif
 
             var clientCertificateValidationCalled = false;
+            var presentedClientCertificateMatches = false;
+            var requireExpectedClientCertificate = false;
 
             using (var server = new MockKubeApiServer(testOutput, listenConfigure: options =>
             {
@@ -212,34 +195,44 @@ namespace k8s.Tests
                     ClientCertificateValidation = (certificate, chain, valid) =>
                     {
                         clientCertificateValidationCalled = true;
-                        return clientCertificate.Equals(certificate);
+                        presentedClientCertificateMatches = certificate != null &&
+                            clientCertificate.RawData.SequenceEqual(certificate.GetRawCertData());
+                        return certificate != null && (!requireExpectedClientCertificate || presentedClientCertificateMatches);
                     },
                 });
             }))
             {
+                var serverUri = new UriBuilder(server.Uri)
+                {
+                    Host = "localhost",
+                }.Uri.ToString();
+
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         ClientCertificateData = clientCertificateData,
                         ClientCertificateKeyData = clientCertificateKeyData,
-                        SslCaCerts = new X509Certificate2Collection(serverCertificate),
+                        SslCaCerts = new X509Certificate2Collection(trustedCaCertificate),
                         SkipTlsVerify = false,
                     });
 
                     var listTask = ExecuteListPods(client);
 
                     Assert.True(clientCertificateValidationCalled);
+                    Assert.True(presentedClientCertificateMatches);
                     Assert.True(listTask.Response.IsSuccessStatusCode);
                     Assert.Single(listTask.Body.Items);
                 }
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = false;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         ClientCertificateData = clientCertificateData,
                         ClientCertificateKeyData = clientCertificateKeyData,
                         SkipTlsVerify = true,
@@ -248,15 +241,17 @@ namespace k8s.Tests
                     var listTask = ExecuteListPods(client);
 
                     Assert.True(clientCertificateValidationCalled);
+                    Assert.True(presentedClientCertificateMatches);
                     Assert.True(listTask.Response.IsSuccessStatusCode);
                     Assert.Single(listTask.Body.Items);
                 }
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = true;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         ClientCertificateFilePath =
                             "assets/client.crt", // TODO amazoning why client.crt != client-data.txt
                         ClientKeyFilePath = "assets/client.key",
@@ -269,9 +264,10 @@ namespace k8s.Tests
 
                 {
                     clientCertificateValidationCalled = false;
+                    requireExpectedClientCertificate = true;
                     var client = new Kubernetes(new KubernetesClientConfiguration
                     {
-                        Host = server.Uri.ToString(),
+                        Host = serverUri,
                         SkipTlsVerify = true,
                     });
 
@@ -571,6 +567,38 @@ namespace k8s.Tests
             certificate = RSACertificateExtensions.CopyWithPrivateKey(certificate, rsa);
 
             return certificate;
+        }
+
+        private static X509Certificate2 CreateServerCertificate(out X509Certificate2 caCertificate)
+        {
+            using var caRsa = RSA.Create(2048);
+            var caRequest = new CertificateRequest("CN=Test CA", caRsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            caRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+            caRequest.CertificateExtensions.Add(new X509KeyUsageExtension(
+                X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+                true));
+            caCertificate = caRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(365));
+
+            using var serverRsa = RSA.Create(2048);
+            var request = new CertificateRequest("CN=localhost", serverRsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var subjectAlternativeName = new SubjectAlternativeNameBuilder();
+            subjectAlternativeName.AddDnsName("localhost");
+            subjectAlternativeName.AddIpAddress(IPAddress.Loopback);
+            request.CertificateExtensions.Add(subjectAlternativeName.Build());
+            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(
+                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
+                true));
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") },
+                true));
+
+            var serverCertificate = request.Create(
+                caCertificate,
+                DateTimeOffset.UtcNow.AddDays(-1),
+                DateTimeOffset.UtcNow.AddDays(90),
+                new byte[] { 1, 2, 3, 4 });
+            return serverCertificate.CopyWithPrivateKey(serverRsa);
         }
 
         private K8SConfiguration GetK8SConfiguration(string serverUri, string responseJson, string name)
