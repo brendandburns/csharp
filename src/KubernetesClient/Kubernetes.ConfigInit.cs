@@ -225,22 +225,7 @@ namespace k8s
 #else
                 throw new NotSupportedException("Custom trust store requires .NET 5.0 or later. Current platform does not support this feature.");
 #endif
-                var isValid = chain.Build((X509Certificate2)certificate);
-
-                var isTrusted = false;
-
-                // Make sure that one of our trusted certs exists in the chain provided by the server.
-                //
-                foreach (var cert in caCerts)
-                {
-                    if (chain.Build(cert))
-                    {
-                        isTrusted = true;
-                        break;
-                    }
-                }
-
-                return isValid && isTrusted;
+                return chain.Build((X509Certificate2)certificate);
             }
 
             // In all other cases, return false.
